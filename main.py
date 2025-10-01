@@ -118,7 +118,7 @@ def find(ctx: click.Context, address: str):
     obj: ContextObj = ctx.obj
 
     if "/" in address:
-        query = address_overlaps("address", ipaddress.ip_network(address))
+        query = address_overlaps("address", ipaddress.ip_network(address, strict=False))
     else:
         query = address_contains("address", ipaddress.ip_address(address))
 
@@ -138,28 +138,48 @@ def find(ctx: click.Context, address: str):
 def pretty_print(ctx: click.Context):
     obj: ContextObj = ctx.obj
 
-    ip_trie = pytricia.PyTricia()
+    ipv4_trie = pytricia.PyTricia(32)
+    ipv6_trie = pytricia.PyTricia(128)
 
     for result in obj.collection.find():
         address = to_python_ip_network(result["address"])
 
-        ip_trie.insert(address, result["description"])
+        if isinstance(address, ipaddress.IPv4Network):
+            ipv4_trie[address] = result["description"]
+        else:
+            ipv6_trie[address] = result["description"]
 
-    tree = Tree()
-    tree.create_node("root", "root")
+    tree_ipv4 = Tree()
+    tree_ipv4.create_node("0.0.0.0/0", "0.0.0.0/0")
 
-    for address in ip_trie.keys():
-        description = ip_trie[address]
+    for address in ipv4_trie:
+        description = ipv4_trie.get(address)
+        parent = ipv4_trie.parent(address)
 
-        parent = ip_trie.parent(address)
-
-        tree.create_node(
+        tree_ipv4.create_node(
             f"{address} - {description}",
             address,
-            parent=parent if parent else "root",
+            parent=parent if parent else "0.0.0.0/0",
         )
 
-    click.echo(tree.show())
+    click.echo("IPv4 Network Tree:")
+    click.echo(tree_ipv4.show())
+
+    tree_ipv6 = Tree()
+    tree_ipv6.create_node("::/0", "::/0")
+
+    for address in ipv6_trie:
+        description = ipv6_trie.get(address)
+        parent = ipv6_trie.parent(address)
+
+        tree_ipv6.create_node(
+            f"{address} - {description}",
+            address,
+            parent=parent if parent else "::/0",
+        )
+
+    click.echo("IPv6 Network Tree:")
+    click.echo(tree_ipv6.show())
 
 
 if __name__ == "__main__":
