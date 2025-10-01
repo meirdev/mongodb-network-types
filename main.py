@@ -11,7 +11,7 @@ from pymongo.database import Database
 from pymongo.server_api import ServerApi
 from treelib import Tree
 
-from src.operators import address_contains
+from src.operators import address_contains, address_overlaps
 from src.schema import NETWORKS_INDEXES, NETWORKS_VALIDATOR_SCHEMA
 from src.types import to_mongodb_ip_network, to_python_ip_network
 
@@ -117,9 +117,12 @@ def load(ctx: click.Context, file):
 def find(ctx: click.Context, address: str):
     obj: ContextObj = ctx.obj
 
-    result = obj.collection.find(
-        address_contains("address", ipaddress.ip_address(address))
-    )
+    if "/" in address:
+        query = address_overlaps("address", ipaddress.ip_network(address))
+    else:
+        query = address_contains("address", ipaddress.ip_address(address))
+
+    result = obj.collection.find(query)
 
     if not result:
         click.echo("No results found.")

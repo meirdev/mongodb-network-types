@@ -70,14 +70,14 @@ def address_overlaps(
     field: str,
     address: IPv4Network | IPv6Network,
 ) -> Mapping[str, Any]:
-    if isinstance(address, IPv4Address):
+    if isinstance(address, IPv4Network):
         return {
             f"{field}.version": 4,
             "$or": [
                 {
                     f"{field}.network_address": {
-                        "$lte": Int64(address.broadcast_address),
-                        "$gte": Int64(address.network_address),
+                        "$lte": Int64(address.network_address),
+                        "$gte": Int64(address.broadcast_address),
                     },
                 },
                 {
@@ -88,10 +88,10 @@ def address_overlaps(
                 },
                 {
                     f"{field}.network_address": {
-                        "$gte": Int64(address.network_address)
+                        "$lte": Int64(address.network_address)
                     },
                     f"{field}.broadcast_address": {
-                        "$lte": Int64(address.broadcast_address)
+                        "$gte": Int64(address.broadcast_address)
                     },
                 },
             ],
