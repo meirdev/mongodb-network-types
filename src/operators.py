@@ -5,6 +5,39 @@ from typing import Any, Mapping
 from bson.int64 import Int64
 
 
+def _lte_128(addr_prefix: str, target_high: Int64, target_low: Int64):
+    return {
+        "$or": [
+            {f"{addr_prefix}.0": {"$lt": target_high}},
+            {
+                "$and": [
+                    {f"{addr_prefix}.0": target_high},
+                    {f"{addr_prefix}.1": {"$lte": target_low}},
+                ],
+            },
+        ],
+    }
+
+
+def _gte_128(addr_prefix: str, target_high: Int64, target_low: Int64):
+    return {
+        "$or": [
+            {f"{addr_prefix}.0": {"$gt": target_high}},
+            {
+                "$and": [
+                    {f"{addr_prefix}.0": target_high},
+                    {f"{addr_prefix}.1": {"$gte": target_low}},
+                ],
+            },
+        ],
+    }
+
+
+def _unpack_ipv6(address: IPv6Address) -> tuple[Int64, Int64]:
+    high, low = struct.unpack(">qq", int(address).to_bytes(length=16))
+    return Int64(high), Int64(low)
+
+
 def address_contains(
     field: str,
     address: IPv4Address | IPv6Address,
@@ -20,48 +53,15 @@ def address_contains(
             },
         }
     else:
-        high, low = struct.unpack(">qq", int(address).to_bytes(length=16))
-        high, low = Int64(high), Int64(low)
+        high, low = _unpack_ipv6(address)
 
         return {
             "$and": [
                 {
                     f"{field}.version": 6,
                 },
-                {
-                    "$or": [
-                        {
-                            f"{field}.network_address.0": {"$lt": high},
-                        },
-                        {
-                            "$and": [
-                                {
-                                    f"{field}.network_address.0": high,
-                                },
-                                {
-                                    f"{field}.network_address.1": {"$lte": low},
-                                },
-                            ],
-                        },
-                    ],
-                },
-                {
-                    "$or": [
-                        {
-                            f"{field}.broadcast_address.0": {"$gt": high},
-                        },
-                        {
-                            "$and": [
-                                {
-                                    f"{field}.broadcast_address.0": high,
-                                },
-                                {
-                                    f"{field}.broadcast_address.1": {"$gte": low},
-                                },
-                            ],
-                        },
-                    ],
-                },
+                _lte_128(f"{field}.network_address", high, low),
+                _gte_128(f"{field}.broadcast_address", high, low),
             ],
         }
 
@@ -105,67 +105,34 @@ def address_overlaps(
             ],
         }
     else:
-        net_high, net_low = struct.unpack(
-            ">qq", int(address.network_address).to_bytes(length=16)
-        )
-        net_high, net_low = Int64(net_high), Int64(net_low)
-
-        bcast_high, bcast_low = struct.unpack(
-            ">qq", int(address.broadcast_address).to_bytes(length=16)
-        )
-        bcast_high, bcast_low = Int64(bcast_high), Int64(bcast_low)
-
-        def lte_128(addr_prefix: str, target_high: Int64, target_low: Int64):
-            return {
-                "$or": [
-                    {f"{addr_prefix}.0": {"$lt": target_high}},
-                    {
-                        "$and": [
-                            {f"{addr_prefix}.0": target_high},
-                            {f"{addr_prefix}.1": {"$lte": target_low}},
-                        ],
-                    },
-                ],
-            }
-
-        def gte_128(addr_prefix: str, target_high: Int64, target_low: Int64):
-            return {
-                "$or": [
-                    {f"{addr_prefix}.0": {"$gt": target_high}},
-                    {
-                        "$and": [
-                            {f"{addr_prefix}.0": target_high},
-                            {f"{addr_prefix}.1": {"$gte": target_low}},
-                        ],
-                    },
-                ],
-            }
+        net_high, net_low = _unpack_ipv6(address.network_address)
+        bcast_high, bcast_low = _unpack_ipv6(address.broadcast_address)
 
         return {
             f"{field}.version": 6,
             "$or": [
                 {
                     "$and": [
-                        lte_128(f"{field}.network_address", net_high, net_low),
-                        gte_128(f"{field}.network_address", bcast_high, bcast_low),
+                        _lte_128(f"{field}.network_address", net_high, net_low),
+                        _gte_128(f"{field}.network_address", bcast_high, bcast_low),
                     ],
                 },
                 {
                     "$and": [
-                        lte_128(f"{field}.broadcast_address", net_high, net_low),
-                        gte_128(f"{field}.broadcast_address", bcast_high, bcast_low),
+                        _lte_128(f"{field}.broadcast_address", net_high, net_low),
+                        _gte_128(f"{field}.broadcast_address", bcast_high, bcast_low),
                     ],
                 },
                 {
                     "$and": [
-                        lte_128(f"{field}.network_address", net_high, net_low),
-                        gte_128(f"{field}.broadcast_address", bcast_high, bcast_low),
+                        _lte_128(f"{field}.network_address", net_high, net_low),
+                        _gte_128(f"{field}.broadcast_address", bcast_high, bcast_low),
                     ],
                 },
                 {
                     "$and": [
-                        gte_128(f"{field}.network_address", net_high, net_low),
-                        lte_128(f"{field}.broadcast_address", bcast_high, bcast_low),
+                        _gte_128(f"{field}.network_address", net_high, net_low),
+                        _lte_128(f"{field}.broadcast_address", bcast_high, bcast_low),
                     ],
                 },
             ],
