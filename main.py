@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any, NotRequired, TypedDict
 
 import click
-import pytricia
+import pytricia  # type: ignore
 from pymongo import MongoClient
 from pymongo.collection import Collection
 from pymongo.database import Database
